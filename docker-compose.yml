@@ -1,0 +1,62 @@
+version: '3'
+
+services:
+  # PostgreSQL database
+  database:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - mnist-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Model training service
+  model:
+    build:
+      context: .
+      dockerfile: model/Dockerfile
+    volumes:
+      - ./model:/app/model
+    networks:
+      - mnist-network
+    depends_on:
+      database:
+        condition: service_healthy
+
+  # Streamlit web app
+  webapp:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    volumes:
+      - ./model:/app/model
+    ports:
+      - "8501:8501"
+    networks:
+      - mnist-network
+    environment:
+      - DB_HOST=database
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    depends_on:
+      - model
+      - database
+
+networks:
+  mnist-network:
+    driver: bridge
+
+volumes:
+  pgdata:
